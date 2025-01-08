@@ -13,6 +13,9 @@ from langchain.chains import ConversationalRetrievalChain
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())    # read local .env file
 
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 #export OPENAI_API_KEY=
 #os.environ["OPENAI_API_BASE"] = 'https://api.chatgptid.net/v1'
