@@ -98,7 +98,7 @@ def main():
     # 用于上传检索文件
     uploaded_file = st.sidebar.file_uploader("上传PDF文件", type=["pdf", "md"])
     if uploaded_file is not None:
-        path = os.path.join("data_base\knowledge_db", uploaded_file.name)
+        path = os.path.join("data_base/knowledge_db", uploaded_file.name)
         with open(path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
