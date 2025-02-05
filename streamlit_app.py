@@ -36,23 +36,16 @@ def generate_response(input_text, openai_api_key):
     #st.info(output)
     return output
 
-def get_vectordb(split_docs):
+def get_vectordb():
     # 定义 Embeddings
     embedding = ZhipuAIEmbeddings()
     # 向量数据库持久化路径
     persist_directory = 'data_base/vector_db/chroma'
     # 加载数据库
-    if split_docs is not None:
-        vectordb = Chroma(
-            documents=split_docs,
-            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
-            embedding_function=embedding
-        )
-    else:
-        vectordb = Chroma(
-            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
-            embedding_function=embedding
-        )
+    vectordb = Chroma(
+        persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
+        embedding_function=embedding
+    )
         
     return vectordb
 
@@ -115,7 +108,15 @@ def main():
     chunk_size=500, chunk_overlap=50)
         split_docs = text_splitter.split_documents(texts)
 
-        vectordb = get_vectordb()
+        # 定义 Embeddings
+        embedding = ZhipuAIEmbeddings()
+        # 向量数据库持久化路径
+        persist_directory = 'data_base/vector_db/chroma'
+        vectordb = Chroma(
+            documents=split_docs,
+            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
+            embedding_function=embedding
+        )
         vectordb.persist()
         st.success("文档已成功上传！")
 
