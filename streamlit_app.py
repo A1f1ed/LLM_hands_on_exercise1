@@ -8,12 +8,15 @@ import os
 from langchain_core.output_parsers import StrOutputParser
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
-#sys.path.append("../C3 搭建知识库") # 将父目录放入系统路径中
 from zhipuai_embedding import ZhipuAIEmbeddings
 from langchain.vectorstores.chroma import Chroma
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from dotenv import load_dotenv, find_dotenv
+from langchain.document_loaders.pdf import PyMuPDFLoader
+from langchain.document_loaders.markdown import UnstructuredMarkdownLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 _ = load_dotenv(find_dotenv())    # read local .env file
 
 
@@ -33,16 +36,24 @@ def generate_response(input_text, openai_api_key):
     #st.info(output)
     return output
 
-def get_vectordb():
+def get_vectordb(split_docs):
     # 定义 Embeddings
     embedding = ZhipuAIEmbeddings()
     # 向量数据库持久化路径
     persist_directory = 'data_base/vector_db/chroma'
     # 加载数据库
-    vectordb = Chroma(
-        persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
-        embedding_function=embedding
-    )
+    if split_docs is not None:
+        vectordb = Chroma(
+            documents=split_docs,
+            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
+            embedding_function=embedding
+        )
+    else:
+        vectordb = Chroma(
+            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
+            embedding_function=embedding
+        )
+        
     return vectordb
 
 #带有历史记录的问答链
@@ -81,10 +92,33 @@ def get_qa_chain(question:str,openai_api_key:str):
     return result["result"]
 
 
+#加载PDF和Markdown文件
+def load_pdf(file_path):
+    return PyMuPDFLoader(file_path).load()
+
+
 # Streamlit 应用程序界面
 def main():
     st.title('🐀Jerry的RAG知识库')
     openai_api_key = st.sidebar.text_input('OpenAI API Key', type='password')
+
+    # 用于上传检索文件
+    uploaded_file = st.sidebar.file_uploader("上传PDF文件", type=["pdf", "md"])
+    if uploaded_file is not None:
+        path = os.path.join("data_base\knowledge_db", uploaded_file.name)
+        with open(path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        texts = load_pdf(path)
+
+        text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500, chunk_overlap=50)
+        split_docs = text_splitter.split_documents(texts)
+
+        vectordb = get_vectordb()
+        vectordb.persist()
+        st.success("文档已成功上传！")
+
 
     # 添加一个选择按钮来选择不同的模型
     #selected_method = st.sidebar.selectbox("选择模式", ["qa_chain", "chat_qa_chain", "None"])
