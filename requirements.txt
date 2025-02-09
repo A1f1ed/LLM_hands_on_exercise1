@@ -28,3 +28,4 @@ erniebot==0.5.5
 streamlit==1.41.1
 unstructured
 pysqlite3-binary
+PyPDF2
