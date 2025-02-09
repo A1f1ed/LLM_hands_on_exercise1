@@ -3,8 +3,7 @@ import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
-from langchain_openai import ChatOpenAI
-import os
+# import os
 from langchain_core.output_parsers import StrOutputParser
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
@@ -12,31 +11,57 @@ from zhipuai_embedding import ZhipuAIEmbeddings
 from langchain.vectorstores.chroma import Chroma
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 from langchain.document_loaders.pdf import PyMuPDFLoader
 from langchain.document_loaders.markdown import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+# import io
+# import fitz  # PyMuPDF
 from langchain.schema import Document
 from PyPDF2 import PdfReader
+from zhipuai_llm import ZhipuAILLM
 
-_ = load_dotenv(find_dotenv())    # read local .env file
+# _ = load_dotenv(find_dotenv())    # read local .env file
 
 
 #export OPENAI_API_KEY=
 #os.environ["OPENAI_API_BASE"] = 'https://api.chatgptid.net/v1'
-zhipuai_api_key = os.environ['ZHIPUAI_API_KEY']
+# zhipuai_api_key = os.environ['ZHIPUAI_API_KEY']
 
 
-def generate_response(input_text, openai_api_key):
-    llm = ChatOpenAI(
-                    model_name = "gpt-4o-mini",
+def generate_response(input_text, zhipuai_api_key):
+    llm = ZhipuAILLM(
+                    model= "glm-4-flash",
                      temperature=0.7, 
-                     openai_api_key=openai_api_key)
+                     api_key=zhipuai_api_key)
     output = llm.invoke(input_text)
     output_parser = StrOutputParser()
     output = output_parser.invoke(output)
     #st.info(output)
     return output
+
+# def get_vectordb_disk():
+#     # 定义 Embeddings
+#     embedding = ZhipuAIEmbeddings()
+#     # 向量数据库持久化路径
+#     persist_directory = 'data_base/vector_db/chroma'
+#     # 加载数据库
+#     vectordb = Chroma(
+#         persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
+#         embedding_function=embedding
+#     )
+        
+#     return vectordb
+
+# def get_vectordb_memory(split_docs):
+#     # 定义 Embeddings
+#     embedding = ZhipuAIEmbeddings()
+#     # 加载数据库
+#     vectordb = Chroma.from_documents(
+#         documents=split_docs,
+#         embedding=embedding
+#     )
+#     return vectordb
 
 # 获取vectordb
 def get_vectordb(uploaded_files):
@@ -92,9 +117,11 @@ def get_vectordb(uploaded_files):
                             embedding_function=embedding)
     return vectordb
 
+
+
 #带有历史记录的问答链
-def get_chat_qa_chain(question:str,openai_api_key:str,vectordb):
-    llm = ChatOpenAI(model_name = "gpt-4o-mini", temperature = 0,openai_api_key = openai_api_key)
+def get_chat_qa_chain(question:str,zhipuai_api_key:str,vectordb):
+    llm = ZhipuAILLM(model= "glm-4-flash", temperature = 0,api_key=zhipuai_api_key)
     memory = ConversationBufferMemory(
         memory_key="chat_history",  # 与 prompt 的输入变量保持一致。
         return_messages=True  # 将以消息列表的形式返回聊天记录，而不是单个字符串
@@ -105,12 +132,12 @@ def get_chat_qa_chain(question:str,openai_api_key:str,vectordb):
         retriever=retriever,
         memory=memory
     )
-    result = qa({"question": question})
+    result = qa.invoke({"question": question})
     return result['answer']
 
 #不带历史记录的问答链
-def get_qa_chain(question:str,openai_api_key:str,vectordb):
-    llm = ChatOpenAI(model_name = "gpt-4o-mini", temperature = 0,openai_api_key = openai_api_key)
+def get_qa_chain(question:str,zhipuai_api_key:str,vectordb):
+    llm = ZhipuAILLM(model= "glm-4-flash", temperature = 0,api_key=zhipuai_api_key)
     template = """使用以下上下文来回答最后的问题。如果你不知道答案，就说你不知道，不要试图编造答
         案。最多使用三句话。尽量使答案简明扼要。总是在回答的最后说“谢谢你的提问！”。
         {context}
@@ -122,7 +149,7 @@ def get_qa_chain(question:str,openai_api_key:str,vectordb):
                                        retriever=vectordb.as_retriever(),
                                        return_source_documents=True,
                                        chain_type_kwargs={"prompt":QA_CHAIN_PROMPT})
-    result = qa_chain({"query": question})
+    result = qa_chain.invoke({"query": question})
     return result["result"]
 
 
@@ -134,7 +161,7 @@ def get_qa_chain(question:str,openai_api_key:str,vectordb):
 # Streamlit 应用程序界面
 def main():
     st.title('🐀Jerry的RAG知识库')
-    openai_api_key = st.sidebar.text_input('OpenAI API Key', type='password')
+    zhipuai_api_key = st.sidebar.text_input('Zhipu API Key', type='password')
 
     # 获取上传文件
     uploaded_files = st.sidebar.file_uploader("上传PDF文件", type=["pdf"],accept_multiple_files=True)
@@ -164,11 +191,11 @@ def main():
 
         if selected_method == "None":
             # 调用 respond 函数获取回答
-            answer = generate_response(prompt, openai_api_key)
+            answer = generate_response(prompt, zhipuai_api_key)
         elif selected_method == "qa_chain":
-            answer = get_qa_chain(prompt,openai_api_key,vectordb)
+            answer = get_qa_chain(prompt,zhipuai_api_key,vectordb)
         elif selected_method == "chat_qa_chain":
-            answer = get_chat_qa_chain(prompt,openai_api_key,vectordb)
+            answer = get_chat_qa_chain(prompt,zhipuai_api_key,vectordb)
 
         # 检查回答是否为 None
         if answer is not None:
