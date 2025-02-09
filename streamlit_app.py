@@ -16,6 +16,8 @@ from dotenv import load_dotenv, find_dotenv
 from langchain.document_loaders.pdf import PyMuPDFLoader
 from langchain.document_loaders.markdown import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from PyPDF2 import PdfReader
 
 _ = load_dotenv(find_dotenv())    # read local .env file
 
@@ -36,22 +38,62 @@ def generate_response(input_text, openai_api_key):
     #st.info(output)
     return output
 
-def get_vectordb():
-    # 定义 Embeddings
+# 获取vectordb
+def get_vectordb(uploaded_files):
     embedding = ZhipuAIEmbeddings()
-    # 向量数据库持久化路径
     persist_directory = 'data_base/vector_db/chroma'
-    # 加载数据库
-    vectordb = Chroma(
-        persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
-        embedding_function=embedding
-    )
-        
+    if uploaded_files:
+        documents = []
+        for uploaded_file in uploaded_files:
+            if uploaded_file is not None:
+                # PDF保存文件到本地,并通过文件路径加载文档
+                # path = os.path.join("data_base/knowledge_db", uploaded_file.name)
+                # with open(path, "wb") as f:
+                #     f.write(uploaded_file.getbuffer())
+                # documents = load_pdf(path)
+
+
+                # # 从缓存中读取 PDF 文件内容 方法一
+                # pdf_bytes = uploaded_file.read()
+                # pdf_stream = io.BytesIO(pdf_bytes)
+                # pdf_document = fitz.open(stream=pdf_stream, filetype="pdf")
+
+                    # # 提取文本内容
+                # text = ""
+                # for page_num in range(len(pdf_document)):
+                #     page = pdf_document.load_page(page_num)
+                #     text += page.get_text()
+
+                # 从缓存中读取 PDF 文件内容 方法二
+                pdf_document = PdfReader(uploaded_file)
+                    # 提取文本内容
+                text = ""
+                for page in pdf_document.pages:
+                    text += page.extract_text()
+
+                # 创建 langchain 文档对象
+                document = Document(page_content=text)
+                documents.append(document)
+                st.sidebar.success(f"{uploaded_file.name} has been successfully uploaded.")
+            else:
+                st.sidebar.error(f"{uploaded_file.name} is not a valid file.")
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500, chunk_overlap=50)
+
+        split_docs = text_splitter.split_documents(documents)
+
+        vectordb = Chroma.from_documents(
+                                            documents=split_docs,
+                                            embedding=embedding)
+    else:
+        vectordb = Chroma(
+                            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
+                            embedding_function=embedding)
     return vectordb
 
 #带有历史记录的问答链
-def get_chat_qa_chain(question:str,openai_api_key:str):
-    vectordb = get_vectordb()
+def get_chat_qa_chain(question:str,openai_api_key:str,vectordb):
     llm = ChatOpenAI(model_name = "gpt-4o-mini", temperature = 0,openai_api_key = openai_api_key)
     memory = ConversationBufferMemory(
         memory_key="chat_history",  # 与 prompt 的输入变量保持一致。
@@ -67,8 +109,7 @@ def get_chat_qa_chain(question:str,openai_api_key:str):
     return result['answer']
 
 #不带历史记录的问答链
-def get_qa_chain(question:str,openai_api_key:str):
-    vectordb = get_vectordb()
+def get_qa_chain(question:str,openai_api_key:str,vectordb):
     llm = ChatOpenAI(model_name = "gpt-4o-mini", temperature = 0,openai_api_key = openai_api_key)
     template = """使用以下上下文来回答最后的问题。如果你不知道答案，就说你不知道，不要试图编造答
         案。最多使用三句话。尽量使答案简明扼要。总是在回答的最后说“谢谢你的提问！”。
@@ -85,9 +126,9 @@ def get_qa_chain(question:str,openai_api_key:str):
     return result["result"]
 
 
-#加载PDF和Markdown文件
-def load_pdf(file_path):
-    return PyMuPDFLoader(file_path).load()
+# #加载PDF和Markdown文件
+# def load_pdf(file_path):
+#     return PyMuPDFLoader(file_path).load()
 
 
 # Streamlit 应用程序界面
@@ -95,38 +136,22 @@ def main():
     st.title('🐀Jerry的RAG知识库')
     openai_api_key = st.sidebar.text_input('OpenAI API Key', type='password')
 
-    # 用于上传检索文件
-    uploaded_file = st.sidebar.file_uploader("上传PDF文件", type=["pdf", "md"])
-    if uploaded_file is not None:
-        path = os.path.join("data_base/knowledge_db", uploaded_file.name)
-        with open(path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-        texts = load_pdf(path)
-
-        text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500, chunk_overlap=50)
-        split_docs = text_splitter.split_documents(texts)
-
-        # 定义 Embeddings
-        embedding = ZhipuAIEmbeddings()
-        # 向量数据库持久化路径
-        persist_directory = 'data_base/vector_db/chroma'
-        vectordb = Chroma(
-            documents=split_docs,
-            persist_directory=persist_directory,  # 允许我们将persist_directory目录保存到磁盘上
-            embedding_function=embedding
-        )
-        vectordb.persist()
-        st.success("文档已成功上传！")
-
+    # 获取上传文件
+    uploaded_files = st.sidebar.file_uploader("上传PDF文件", type=["pdf"],accept_multiple_files=True)
+    
+    # 上传文件后，获取vectordb
+    vectordb = get_vectordb(uploaded_files)
 
     # 添加一个选择按钮来选择不同的模型
-    #selected_method = st.sidebar.selectbox("选择模式", ["qa_chain", "chat_qa_chain", "None"])
-    selected_method = st.radio(
-        "你想选择哪种模式进行对话？",
-        ["None", "qa_chain", "chat_qa_chain"],
-        captions = ["不使用检索问答的普通模式", "不带历史记录的检索问答模式", "带历史记录的检索问答模式"])
+    # 方法一：使用 radio，单项选择
+    # selected_method = st.radio(
+    #     "你想选择哪种模式进行对话？",
+    #     ["None", "qa_chain", "chat_qa_chain"],
+    #     captions = ["不使用检索问答的普通模式", "不带历史记录的检索问答模式", "带历史记录的检索问答模式"])
+    # 方法二：使用 selectbox，下拉框
+    selected_method = st.selectbox(
+        label = "你想选择哪种模式进行对话？",
+        options = ["None", "qa_chain", "chat_qa_chain"])
 
     # 用于跟踪对话历史
     if 'messages' not in st.session_state:
@@ -141,9 +166,9 @@ def main():
             # 调用 respond 函数获取回答
             answer = generate_response(prompt, openai_api_key)
         elif selected_method == "qa_chain":
-            answer = get_qa_chain(prompt,openai_api_key)
+            answer = get_qa_chain(prompt,openai_api_key,vectordb)
         elif selected_method == "chat_qa_chain":
-            answer = get_chat_qa_chain(prompt,openai_api_key)
+            answer = get_chat_qa_chain(prompt,openai_api_key,vectordb)
 
         # 检查回答是否为 None
         if answer is not None:
