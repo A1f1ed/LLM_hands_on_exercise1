@@ -12,14 +12,14 @@ from zhipuai_embedding import ZhipuAIEmbeddings
 from langchain.vectorstores.chroma import Chroma
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 from langchain.document_loaders.pdf import PyMuPDFLoader
 from langchain.document_loaders.markdown import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from PyPDF2 import PdfReader
 
-_ = load_dotenv(find_dotenv())    # read local .env file
+# _ = load_dotenv(find_dotenv())    # read local .env file
 
 
 #export OPENAI_API_KEY=
